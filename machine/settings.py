@@ -20,6 +20,7 @@ def import_settings(settings_module: str = "local_settings") -> Tuple[CaseInsens
         "HTTP_PROXY": None,
         "TZ": "UTC",
         "LOG_HANDLED_MESSAGES": True,
+        "FORCE_USER_LOOKUP": False,
     }
     settings = CaseInsensitiveDict(default_settings)
     try:
