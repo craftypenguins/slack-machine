@@ -44,6 +44,7 @@ def create_message_handler(
                     message_matcher=message_matcher,
                     slack_client=slack_client,
                     log_handled_message=settings["LOG_HANDLED_MESSAGES"],
+                    force_user_lookup=settings["FORCE_USER_LOOKUP"],
                 )
 
     return message_handler
@@ -88,6 +89,7 @@ async def handle_message(
     message_matcher: re.Pattern,
     slack_client: SlackClient,
     log_handled_message: bool,
+    force_user_lookup: bool
 ) -> None:
     # Handle message subtype 'message_changed' to allow the bot to respond to edits
     if "subtype" in event and event["subtype"] == "message_changed":
@@ -107,9 +109,9 @@ async def handle_message(
         )
         if respond_to_msg:
             listeners += list(plugin_actions.respond_to.values())
-            await dispatch_listeners(respond_to_msg, listeners, slack_client, log_handled_message)
+            await dispatch_listeners(respond_to_msg, listeners, slack_client, log_handled_message, force_user_lookup)
         else:
-            await dispatch_listeners(event, listeners, slack_client, log_handled_message)
+            await dispatch_listeners(event, listeners, slack_client, log_handled_message, force_user_lookup)
 
 
 def _check_bot_mention(
@@ -149,7 +151,7 @@ def _gen_message(event: dict[str, Any], plugin_class_name: str, slack_client: Sl
 
 
 async def dispatch_listeners(
-    event: dict[str, Any], message_handlers: list[MessageHandler], slack_client: SlackClient, log_handled_message: bool
+    event: dict[str, Any], message_handlers: list[MessageHandler], slack_client: SlackClient, log_handled_message: bool, force_user_lookup: bool
 ) -> None:
     handler_funcs = []
     for handler in message_handlers:
@@ -158,6 +160,8 @@ async def dispatch_listeners(
             continue
         match = matcher.search(event.get("text", ""))
         if match:
+            if force_user_lookup and event['user'] not in slack_client.users:
+                user = await slack_client.get_user(event['user'])
             message = _gen_message(event, handler.class_name, slack_client)
             extra_params = {**match.groupdict()}
             fq_fn_name = f"{handler.class_name}.{handler.function.__name__}"

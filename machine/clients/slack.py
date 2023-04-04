@@ -246,3 +246,9 @@ class SlackClient:
     async def unpin_message(self, channel: Channel | str, ts: str) -> AsyncSlackResponse:
         channel_id = id_for_channel(channel)
         return await self._client.web_client.pins_remove(channel=channel_id, timestamp=ts)
+
+    async def get_user(self, ephemeral_user_id: str) -> User:
+        user_data = await self._client.web_client.users_info(user=ephemeral_user_id)
+        return self._register_user(user_data["user"])
+    
+
