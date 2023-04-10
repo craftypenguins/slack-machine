@@ -63,9 +63,6 @@ class Machine:
             logger.debug("Found local settings %s", self._settings)
 
         # Check if Slack token are present
-        if "SLACK_APP_TOKEN" not in self._settings:
-            logger.error("No SLACK_APP_TOKEN found in settings! I need that to work...")
-            sys.exit(1)
         if "SLACK_BOT_TOKEN" not in self._settings:
             logger.error("No SLACK_BOT_TOKEN found in settings! I need that to work...")
             sys.exit(1)
@@ -108,7 +105,6 @@ class Machine:
         assert self._settings is not None
         # Setup Slack socket mode client
         self._socket_mode_client = SocketModeClient(
-            app_token=self._settings["SLACK_APP_TOKEN"],
             web_client=AsyncWebClient(token=self._settings["SLACK_BOT_TOKEN"]),
             proxy=self._settings["HTTP_PROXY"],
         )
