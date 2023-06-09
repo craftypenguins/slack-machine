@@ -250,5 +250,3 @@ class SlackClient:
     async def get_user(self, ephemeral_user_id: str) -> User:
         user_data = await self._client.web_client.users_info(user=ephemeral_user_id)
         return self._register_user(user_data["user"])
-    
-
