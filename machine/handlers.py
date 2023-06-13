@@ -212,7 +212,7 @@ async def dispatch_listeners(
         if match:
             if force_user_lookup and event["user"] not in slack_client.users:
                 user = await slack_client.get_user(event["user"])
-            message = _gen_message(event, handler.class_name, slack_client)
+            message = _gen_message(event, slack_client)
             extra_params = {**match.groupdict()}
             handler_logger = create_scoped_logger(
                 handler.class_name, handler.function.__name__, message.sender.id, message.sender.name
