@@ -131,7 +131,7 @@ async def handle_message(
     message_matcher: re.Pattern,
     slack_client: SlackClient,
     log_handled_message: bool,
-    force_user_lookup: bool
+    force_user_lookup: bool,
 ) -> None:
     # Handle message subtype 'message_changed' to allow the bot to respond to edits
     if "subtype" in event and event["subtype"] == "message_changed":
@@ -197,7 +197,11 @@ def _gen_command(cmd_payload: dict[str, Any], slack_client: SlackClient) -> Comm
 
 
 async def dispatch_listeners(
-    event: dict[str, Any], message_handlers: list[MessageHandler], slack_client: SlackClient, log_handled_message: bool, force_user_lookup: bool
+    event: dict[str, Any],
+    message_handlers: list[MessageHandler],
+    slack_client: SlackClient,
+    log_handled_message: bool,
+    force_user_lookup: bool,
 ) -> None:
     handler_funcs = []
     for handler in message_handlers:
@@ -206,8 +210,8 @@ async def dispatch_listeners(
             continue
         match = matcher.search(event.get("text", ""))
         if match:
-            if force_user_lookup and event['user'] not in slack_client.users:
-                user = await slack_client.get_user(event['user'])
+            if force_user_lookup and event["user"] not in slack_client.users:
+                user = await slack_client.get_user(event["user"])
             message = _gen_message(event, handler.class_name, slack_client)
             extra_params = {**match.groupdict()}
             handler_logger = create_scoped_logger(
