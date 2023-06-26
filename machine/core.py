@@ -15,7 +15,7 @@ from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.web.async_client import AsyncWebClient
 
 from machine.clients.slack import SlackClient
-from machine.handlers import create_message_handler, create_generic_event_handler, create_slash_command_handler
+from machine.handlers import create_message_handler, create_interactive_event_handler, create_generic_event_handler, create_slash_command_handler
 from machine.models.core import Manual, HumanHelp, MessageHandler, RegisteredActions, CommandHandler
 from machine.plugins.base import MachineBasePlugin
 from machine.plugins.decorators import DecoratedPluginFunc, Metadata, MatcherConfig
@@ -308,10 +308,12 @@ class Machine:
         message_handler = create_message_handler(
             self._registered_actions, self._settings, bot_id, bot_name, self._client
         )
+        interactive_event_handler = create_interactive_event_handler(self._registered_actions)
         generic_event_handler = create_generic_event_handler(self._registered_actions)
         slash_command_handler = create_slash_command_handler(self._registered_actions, self._client)
 
         self._client.register_handler(message_handler)
+        self._client.register_handler(interactive_event_handler)
         self._client.register_handler(generic_event_handler)
         self._client.register_handler(slash_command_handler)
         # Establish a WebSocket connection to the Socket Mode servers
