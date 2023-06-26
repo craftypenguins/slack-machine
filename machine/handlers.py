@@ -111,6 +111,25 @@ def create_generic_event_handler(
     return generic_event_handler
 
 
+def create_interactive_event_handler(
+    plugin_actions: RegisteredActions,
+) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
+    async def interactive_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+        if request.type == "interactive":
+            # Acknowledge the request anyway
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            # Don't forget having await for method calls
+            await client.send_socket_mode_response(response)
+
+            # only process registered 'process' actions
+            if request.payload["event"]["type"] in plugin_actions.process:
+                await dispatch_event_handlers(
+                    request.payload["event"], list(plugin_actions.process[request.payload["event"]["type"]].values())
+                )
+
+    return interactive_event_handler
+
+
 def generate_message_matcher(settings: Mapping) -> re.Pattern[str]:
     alias_regex = ""
     if "ALIASES" in settings:
