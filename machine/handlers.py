@@ -13,6 +13,7 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 
 from machine.clients.slack import SlackClient
 from machine.models.core import RegisteredActions, MessageHandler
+from machine.plugins.interactive import Interactive
 from machine.plugins.command import Command
 from machine.plugins.message import Message
 
@@ -113,19 +114,24 @@ def create_generic_event_handler(
 
 def create_interactive_event_handler(
     plugin_actions: RegisteredActions,
+    slack_client: SlackClient,
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
     async def interactive_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
         if request.type == "interactive":
-            # Acknowledge the request anyway
+            logger.debug("interactive payload received", payload=request.payload)
+            # Ack
             response = SocketModeResponse(envelope_id=request.envelope_id)
-            # Don't forget having await for method calls
             await client.send_socket_mode_response(response)
 
-            # only process registered 'process' actions
-            if request.payload["event"]["type"] in plugin_actions.process:
-                await dispatch_event_handlers(
-                    request.payload["event"], list(plugin_actions.process[request.payload["event"]["type"]].values())
-                )
+            # only process registered 'action_id' interactive payloads
+            # We'll limit ourself to the first action in the array
+            # request->payload->actions[0]->action_id
+            action_id = request.payload["actions"][0]["action_id"]
+            if action_id in plugin_actions.interactive:
+                cmd = plugin_actions.interactive[action_id]
+                interactive_obj = _gen_interactive(request.payload, slack_client)
+                fn = cast(Callable[..., Awaitable[None]], cmd.function)
+                await fn(interactive_obj)
 
     return interactive_event_handler
 
@@ -213,6 +219,10 @@ def _gen_message(event: dict[str, Any], slack_client: SlackClient) -> Message:
 
 def _gen_command(cmd_payload: dict[str, Any], slack_client: SlackClient) -> Command:
     return Command(slack_client, cmd_payload)
+
+
+def _gen_interactive(interactive_payload: dict[str, Any], slack_client: SlackClient) -> Command:
+    return Interactive(slack_client, interactive_payload)
 
 
 async def dispatch_listeners(
