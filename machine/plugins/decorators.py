@@ -31,10 +31,16 @@ class CommandConfig:
 
 
 @dataclass
+class InteractiveConfig:
+    action_id: str
+
+
+@dataclass
 class PluginActions:
     process: list[str] = field(default_factory=list)
     listen_to: list[MatcherConfig] = field(default_factory=list)
     respond_to: list[MatcherConfig] = field(default_factory=list)
+    interactive: list[InteractiveConfig] = field(default_factory=list)
     schedule: dict[str, Any] | None = None
     commands: list[CommandConfig] = field(default_factory=list)
 
@@ -77,6 +83,31 @@ def process(slack_event_type: str) -> Callable[[Callable[P, R]], DecoratedPlugin
         return fn
 
     return process_decorator
+
+
+def interactive(interactive_action_id: str) -> Callable[[Callable[P, R]], DecoratedPluginFunc[P, R]]:
+    """Process Interactive messages with specific action id
+
+    This decorator will enable a Plugin method to process `Interactive Actions`_ of a specific action_id.
+    The plugin method will be called for each interactive payload with the specified action_id in the
+    actions block of an interactive message type that the bot receives.
+    The received event will be passed to the method when called.
+
+    .. _Slack ineractive payloads: https://api.slack.com/reference/interaction-payloads/block-actions
+
+    :param action_id: The action_id from the actions list in an interactive payload
+    :return: wrapped method
+    """
+
+    def interactive_decorator(f: Callable[P, R]) -> DecoratedPluginFunc[P, R]:
+        fn = cast(DecoratedPluginFunc, f)
+        fn.metadata = getattr(f, "metadata", Metadata())
+        fn.metadata.plugin_actions.interactive.append(
+            InteractiveConfig(action_id=interactive_action_id, )
+        )
+        return fn
+
+    return interactive_decorator
 
 
 def listen_to(

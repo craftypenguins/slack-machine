@@ -15,8 +15,8 @@ from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.web.async_client import AsyncWebClient
 
 from machine.clients.slack import SlackClient
-from machine.handlers import create_message_handler, create_generic_event_handler, create_slash_command_handler
-from machine.models.core import Manual, HumanHelp, MessageHandler, RegisteredActions, CommandHandler
+from machine.handlers import create_message_handler, create_generic_event_handler, create_slash_command_handler, create_interactive_event_handler
+from machine.models.core import Manual, HumanHelp, MessageHandler, RegisteredActions, CommandHandler, InteractiveHandler
 from machine.plugins.base import MachineBasePlugin
 from machine.plugins.decorators import DecoratedPluginFunc, Metadata, MatcherConfig
 from machine.storage import PluginStorage, MachineBaseStorage
@@ -207,6 +207,16 @@ class Machine:
             self._registered_actions.process[event] = self._registered_actions.process.get(event, {})
             key = f"{fq_fn_name}-{event}"
             self._registered_actions.process[event][key] = fn
+        for interactive_config in metadata.plugin_actions.interactive:
+            self._register_interactive_handler(
+                class_=cls_instance,
+                class_name=plugin_class_name,
+                fq_fn_name=fq_fn_name,
+                function=fn,
+                action_id=interactive_config.action_id,
+                interactive_config=interactive_config,
+                class_help=class_help,
+            )
         for command_config in metadata.plugin_actions.commands:
             self._register_command_handler(
                 class_=cls_instance,
@@ -277,6 +287,27 @@ class Machine:
         self._registered_actions.command[command] = handler
         # TODO: add to help
 
+    def _register_interactive_handler(
+        self,
+        class_: MachineBasePlugin,
+        class_name: str,
+        fq_fn_name: str,
+        function: Callable[..., Awaitable[None]],
+        action_id: str,
+    ) -> None:
+        signature = Signature.from_callable(function)
+        logger.debug("signature of interactive handler", signature=signature, function=fq_fn_name)
+        handler = InteractiveHandler(
+            class_=class_,
+            class_name=class_name,
+            function=function,
+            function_signature=signature,
+            action_id=action_id
+        )
+        if action_id in self._registered_actions.interactive:
+            logger.warning("action_id was already defined, previous handler will be overwritten!", action_id=action_id)
+        self._registered_actions.interactive[action_id] = handler
+
     @staticmethod
     def _parse_human_help(doc: str) -> HumanHelp:
         summary = doc.splitlines()[0].split(":")
@@ -308,10 +339,12 @@ class Machine:
         message_handler = create_message_handler(
             self._registered_actions, self._settings, bot_id, bot_name, self._client
         )
+        interactive_event_handler = create_interactive_event_handler(self._registered_actions, self._client)
         generic_event_handler = create_generic_event_handler(self._registered_actions)
         slash_command_handler = create_slash_command_handler(self._registered_actions, self._client)
 
         self._client.register_handler(message_handler)
+        self._client.register_handler(interactive_event_handler)
         self._client.register_handler(generic_event_handler)
         self._client.register_handler(slash_command_handler)
         # Establish a WebSocket connection to the Socket Mode servers

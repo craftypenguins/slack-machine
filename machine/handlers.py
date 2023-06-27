@@ -13,6 +13,7 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 
 from machine.clients.slack import SlackClient
 from machine.models.core import RegisteredActions, MessageHandler
+from machine.plugins.interactive import Interactive
 from machine.plugins.command import Command
 from machine.plugins.message import Message
 
@@ -45,6 +46,7 @@ def create_message_handler(
                     message_matcher=message_matcher,
                     slack_client=slack_client,
                     log_handled_message=settings["LOG_HANDLED_MESSAGES"],
+                    force_user_lookup=settings["FORCE_USER_LOOKUP"],
                 )
 
     return message_handler
@@ -110,6 +112,30 @@ def create_generic_event_handler(
     return generic_event_handler
 
 
+def create_interactive_event_handler(
+    plugin_actions: RegisteredActions,
+    slack_client: SlackClient,
+) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
+    async def interactive_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+        if request.type == "interactive":
+            logger.debug("interactive payload received", payload=request.payload)
+            # Ack
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            await client.send_socket_mode_response(response)
+
+            # only process registered 'action_id' interactive payloads
+            # We'll limit ourself to the first action in the array
+            # request->payload->actions[0]->action_id
+            action_id = request.payload["actions"][0]["action_id"]
+            if action_id in plugin_actions.interactive:
+                cmd = plugin_actions.interactive[action_id]
+                interactive_obj = _gen_interactive(request.payload, slack_client)
+                fn = cast(Callable[..., Awaitable[None]], cmd.function)
+                await fn(interactive_obj)
+
+    return interactive_event_handler
+
+
 def generate_message_matcher(settings: Mapping) -> re.Pattern[str]:
     alias_regex = ""
     if "ALIASES" in settings:
@@ -130,6 +156,7 @@ async def handle_message(
     message_matcher: re.Pattern,
     slack_client: SlackClient,
     log_handled_message: bool,
+    force_user_lookup: bool,
 ) -> None:
     # Handle message subtype 'message_changed' to allow the bot to respond to edits
     if "subtype" in event and event["subtype"] == "message_changed":
@@ -149,9 +176,9 @@ async def handle_message(
         )
         if respond_to_msg:
             listeners += list(plugin_actions.respond_to.values())
-            await dispatch_listeners(respond_to_msg, listeners, slack_client, log_handled_message)
+            await dispatch_listeners(respond_to_msg, listeners, slack_client, log_handled_message, force_user_lookup)
         else:
-            await dispatch_listeners(event, listeners, slack_client, log_handled_message)
+            await dispatch_listeners(event, listeners, slack_client, log_handled_message, force_user_lookup)
 
 
 def _check_bot_mention(
@@ -194,8 +221,16 @@ def _gen_command(cmd_payload: dict[str, Any], slack_client: SlackClient) -> Comm
     return Command(slack_client, cmd_payload)
 
 
+def _gen_interactive(interactive_payload: dict[str, Any], slack_client: SlackClient) -> Command:
+    return Interactive(slack_client, interactive_payload)
+
+
 async def dispatch_listeners(
-    event: dict[str, Any], message_handlers: list[MessageHandler], slack_client: SlackClient, log_handled_message: bool
+    event: dict[str, Any],
+    message_handlers: list[MessageHandler],
+    slack_client: SlackClient,
+    log_handled_message: bool,
+    force_user_lookup: bool,
 ) -> None:
     handler_funcs = []
     for handler in message_handlers:
@@ -204,6 +239,8 @@ async def dispatch_listeners(
             continue
         match = matcher.search(event.get("text", ""))
         if match:
+            if force_user_lookup and event["user"] not in slack_client.users:
+                user = await slack_client.get_user(event["user"])
             message = _gen_message(event, slack_client)
             extra_params = {**match.groupdict()}
             handler_logger = create_scoped_logger(
