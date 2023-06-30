@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Sequence, List
 
 from slack_sdk.models.attachments import Attachment
 from slack_sdk.models.blocks import Block
@@ -35,7 +35,7 @@ class Interactive:
 
         :return: the User the message was sent by
         """
-        return self._client.users[self._cmd_payload["user_id"]]
+        return self._client.users[self._cmd_payload["user"]["id"]]
 
     @property
     def channel(self) -> Channel:
@@ -43,11 +43,11 @@ class Interactive:
 
         :return: the Channel the message was sent to
         """
-        return self._client.channels[self._cmd_payload["channel_id"]]
+        return self._client.channels[self._cmd_payload["channel"]["id"]]
 
     @property
     def is_dm(self) -> bool:
-        channel_id = self._cmd_payload["channel_id"]
+        channel_id = self._cmd_payload["channel"]["id"]
         return not (channel_id.startswith("C") or channel_id.startswith("G"))
 
     @property
@@ -59,12 +59,12 @@ class Interactive:
         return self._cmd_payload["state"]
 
     @property
-    def command(self) -> str:
-        """The command that was invoked
+    def actions(self) -> List:
+        """The actions from the actual message
 
-        :return: the command that was invoked
+        :return: the actions (list of dict) of the actual message
         """
-        return self._cmd_payload["command"]
+        return self._cmd_payload["actions"]
 
     @property
     def response_url(self) -> str:
