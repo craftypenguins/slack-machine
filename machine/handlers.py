@@ -126,7 +126,15 @@ def create_interactive_event_handler(
             # only process registered 'action_id' interactive payloads
             # We'll limit ourself to the first action in the array
             # request->payload->actions[0]->action_id
-            action_id = request.payload["actions"][0]["action_id"]
+            try:
+                action_id = request.payload["actions"][0]["action_id"]
+                # You can use action_id here as the value is available
+            except (KeyError, IndexError, TypeError):
+                logger.warning("interactive payload no action_id to trigger on")
+                return
+
+            logger.debug(f"interactive payload action_id {action_id}")
+            logger.debug(f"interactive interactive_actions {plugin_actions.interactive.keys()}")
             if action_id in plugin_actions.interactive:
                 cmd = plugin_actions.interactive[action_id]
                 interactive_obj = _gen_interactive(request.payload, slack_client)
