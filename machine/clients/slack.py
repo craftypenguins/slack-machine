@@ -206,6 +206,9 @@ class SlackClient:
         else:
             return await self._client.web_client.chat_postMessage(channel=channel_id, text=text, **kwargs)
 
+    async def views_open(self, trigger_id: str, view: str, **kwargs: Any) -> AsyncSlackResponse:
+        return await self._client.web_client.views_open(trigger_id=trigger_id, view = view, **kwargs)
+
     async def send_scheduled(
         self, when: datetime, channel: Channel | str, text: str, **kwargs: Any
     ) -> AsyncSlackResponse:

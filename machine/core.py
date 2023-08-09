@@ -15,10 +15,30 @@ from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.web.async_client import AsyncWebClient
 
 from machine.clients.slack import SlackClient
-from machine.handlers import create_message_handler, create_generic_event_handler, create_slash_command_handler, create_interactive_event_handler
-from machine.models.core import Manual, HumanHelp, MessageHandler, RegisteredActions, CommandHandler, InteractiveHandler
+from machine.handlers import (
+    create_message_handler,
+    create_interactive_event_handler,
+    create_view_event_handler,
+    create_generic_event_handler,
+    create_slash_command_handler,
+)
+from machine.models.core import (
+    InteractiveHandler,
+    ViewHandler,
+    Manual,
+    HumanHelp,
+    MessageHandler,
+    RegisteredActions,
+    CommandHandler,
+)
 from machine.plugins.base import MachineBasePlugin
-from machine.plugins.decorators import DecoratedPluginFunc, Metadata, MatcherConfig
+from machine.plugins.decorators import (
+    DecoratedPluginFunc,
+    ViewConfig,
+    InteractiveConfig,
+    Metadata,
+    MatcherConfig,
+)
 from machine.storage import PluginStorage, MachineBaseStorage
 from machine.settings import import_settings
 from machine.utils.collections import CaseInsensitiveDict
@@ -138,7 +158,10 @@ class Machine:
                         logger.warning(error_msg)
                         del instance
                     else:
-                        instance.init()
+                        if asyncio.iscoroutinefunction(instance.init):
+                            await instance.init()
+                        else:
+                            instance.init()
                         logger.info("Plugin %s loaded", class_name)
         await self._storage_backend.set("manual", dill.dumps(self._help))
 
@@ -214,8 +237,14 @@ class Machine:
                 fq_fn_name=fq_fn_name,
                 function=fn,
                 action_id=interactive_config.action_id,
-                interactive_config=interactive_config,
-                class_help=class_help,
+            )
+        for view_config in metadata.plugin_actions.view:
+            self._register_view_handler(
+                class_=cls_instance,
+                class_name=plugin_class_name,
+                fq_fn_name=fq_fn_name,
+                function=fn,
+                callback_id=view_config.callback_id,
             )
         for command_config in metadata.plugin_actions.commands:
             self._register_command_handler(
@@ -298,15 +327,34 @@ class Machine:
         signature = Signature.from_callable(function)
         logger.debug("signature of interactive handler", signature=signature, function=fq_fn_name)
         handler = InteractiveHandler(
-            class_=class_,
-            class_name=class_name,
-            function=function,
-            function_signature=signature,
-            action_id=action_id
+            class_=class_, class_name=class_name, function=function, function_signature=signature, action_id=action_id
         )
         if action_id in self._registered_actions.interactive:
             logger.warning("action_id was already defined, previous handler will be overwritten!", action_id=action_id)
         self._registered_actions.interactive[action_id] = handler
+
+    def _register_view_handler(
+        self,
+        class_: MachineBasePlugin,
+        class_name: str,
+        fq_fn_name: str,
+        function: Callable[..., Awaitable[None]],
+        callback_id: str,
+    ) -> None:
+        signature = Signature.from_callable(function)
+        logger.debug("signature of view handler", signature=signature, function=fq_fn_name)
+        handler = ViewHandler(
+            class_=class_,
+            class_name=class_name,
+            function=function,
+            function_signature=signature,
+            callback_id=callback_id,
+        )
+        if callback_id in self._registered_actions.view:
+            logger.warning(
+                "callback_id was already defined, previous handler will be overwritten!", callback_id=callback_id
+            )
+        self._registered_actions.view[callback_id] = handler
 
     @staticmethod
     def _parse_human_help(doc: str) -> HumanHelp:
@@ -340,11 +388,13 @@ class Machine:
             self._registered_actions, self._settings, bot_id, bot_name, self._client
         )
         interactive_event_handler = create_interactive_event_handler(self._registered_actions, self._client)
+        view_event_handler = create_view_event_handler(self._registered_actions, self._client)
         generic_event_handler = create_generic_event_handler(self._registered_actions)
         slash_command_handler = create_slash_command_handler(self._registered_actions, self._client)
 
         self._client.register_handler(message_handler)
         self._client.register_handler(interactive_event_handler)
+        self._client.register_handler(view_event_handler)
         self._client.register_handler(generic_event_handler)
         self._client.register_handler(slash_command_handler)
         # Establish a WebSocket connection to the Socket Mode servers
