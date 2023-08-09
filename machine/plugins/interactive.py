@@ -6,6 +6,7 @@ from slack_sdk.models.attachments import Attachment
 from slack_sdk.models.blocks import Block
 from slack_sdk.webhook import WebhookResponse
 from slack_sdk.webhook.async_client import AsyncWebhookClient
+from slack_sdk.web.async_slack_response import AsyncSlackResponse
 
 from machine.clients.slack import SlackClient
 from machine.models import User, Channel
@@ -51,12 +52,24 @@ class Interactive:
         return not (channel_id.startswith("C") or channel_id.startswith("G"))
 
     @property
-    def state(self) -> str:
+    def state(self) -> dict[str, Any] | None:
         """The state from the actual message
 
         :return: the state (dict) of the actual message
         """
-        return self._cmd_payload["state"]
+        return (
+            self._cmd_payload["state"]
+            if "state" in self._cmd_payload
+            else self._cmd_payload["view"]["state"] if "view" in self._cmd_payload else None
+        )
+
+    @property
+    def view(self) -> dict[str, Any] | None:
+        """The view from the actual message
+
+        :return: the view (dict) of the actual message
+        """
+        return self._cmd_payload.get("view")
 
     @property
     def actions(self) -> List:
@@ -125,4 +138,26 @@ class Interactive:
 
         return await self._webhook_client.send(
             text=text, attachments=attachments, blocks=blocks, response_type=response_type, **kwargs
+        )
+
+    async def modal(
+        self,
+        view: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncSlackResponse:
+        """Opens a Modal View based on the trigger_id associated with this message
+
+        Any extra kwargs you provide, will be passed on directly to the `views.open`_
+
+        .. _view: https://api.slack.com/reference/surfaces/views
+
+        :param view: view payload
+        :return: Dictionary deserialized from `view.oopen`_ request
+
+        .. _view.open: https://api.slack.com/methods/views.open
+        """
+        return await self._client.views_open(
+            self.trigger_id,
+            view=view,
+            **kwargs,
         )

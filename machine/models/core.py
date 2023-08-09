@@ -40,6 +40,7 @@ class CommandHandler:
     command: str
     is_generator: bool
 
+
 @dataclass
 class InteractiveHandler:
     class_: MachineBasePlugin
@@ -50,9 +51,19 @@ class InteractiveHandler:
 
 
 @dataclass
+class ViewHandler:
+    class_: MachineBasePlugin
+    class_name: str
+    function: Callable[..., Awaitable[None] | AsyncGenerator[dict | JsonObject | str, None]]
+    function_signature: Signature
+    callback_id: str
+
+
+@dataclass
 class RegisteredActions:
     listen_to: dict[str, MessageHandler] = field(default_factory=dict)
     respond_to: dict[str, MessageHandler] = field(default_factory=dict)
     interactive: dict[str, InteractiveHandler] = field(default_factory=dict)
+    view: dict[str, ViewHandler] = field(default_factory=dict)
     process: dict[str, dict[str, Callable[[dict[str, Any]], Awaitable[None]]]] = field(default_factory=dict)
     command: dict[str, CommandHandler] = field(default_factory=dict)

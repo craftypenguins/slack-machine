@@ -36,11 +36,17 @@ class InteractiveConfig:
 
 
 @dataclass
+class ViewConfig:
+    callback_id: str
+
+
+@dataclass
 class PluginActions:
     process: list[str] = field(default_factory=list)
     listen_to: list[MatcherConfig] = field(default_factory=list)
     respond_to: list[MatcherConfig] = field(default_factory=list)
     interactive: list[InteractiveConfig] = field(default_factory=list)
+    view: list[ViewConfig] = field(default_factory=list)
     schedule: dict[str, Any] | None = None
     commands: list[CommandConfig] = field(default_factory=list)
 
@@ -93,7 +99,7 @@ def interactive(interactive_action_id: str) -> Callable[[Callable[P, R]], Decora
     actions block of an interactive message type that the bot receives.
     The received event will be passed to the method when called.
 
-    .. _Slack ineractive payloads: https://api.slack.com/reference/interaction-payloads/block-actions
+    .. _Slack interactive block-action payloads: https://api.slack.com/reference/interaction-payloads/block-actions
 
     :param action_id: The action_id from the actions list in an interactive payload
     :return: wrapped method
@@ -103,11 +109,36 @@ def interactive(interactive_action_id: str) -> Callable[[Callable[P, R]], Decora
         fn = cast(DecoratedPluginFunc, f)
         fn.metadata = getattr(f, "metadata", Metadata())
         fn.metadata.plugin_actions.interactive.append(
-            InteractiveConfig(action_id=interactive_action_id, )
+            InteractiveConfig(
+                action_id=interactive_action_id,
+            )
         )
         return fn
 
     return interactive_decorator
+
+
+def view(interactive_callback_id: str) -> Callable[[Callable[P, R]], DecoratedPluginFunc[P, R]]:
+    """Process Interactive View messages with specific callback_id
+
+    This decorator will enable a Plugin method to process `Interactive view_submissions`_ of a specific callback_id.
+    The plugin method will be called for each interactive payload with the specified callback_id in the
+    view block of an interactive view_submission message type that the bot receives.
+    The received event will be passed to the method when called.
+
+    .. _Slack ineractive view payloads: https://api.slack.com/reference/interaction-payloads/views
+
+    :param callback_id: The callback_id from the view dict in an interactive payload
+    :return: wrapped method
+    """
+
+    def view_decorator(f: Callable[P, R]) -> DecoratedPluginFunc[P, R]:
+        fn = cast(DecoratedPluginFunc, f)
+        fn.metadata = getattr(f, "metadata", Metadata())
+        fn.metadata.plugin_actions.view.append(ViewConfig(callback_id=interactive_callback_id))
+        return fn
+
+    return view_decorator
 
 
 def listen_to(
