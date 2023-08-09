@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from typing import Any, Sequence, List
+from structlog.stdlib import get_logger
 
 from slack_sdk.models.attachments import Attachment
 from slack_sdk.models.blocks import Block
+from slack_sdk.web.async_slack_response import AsyncSlackResponse
 from slack_sdk.webhook import WebhookResponse
 from slack_sdk.webhook.async_client import AsyncWebhookClient
-from slack_sdk.web.async_slack_response import AsyncSlackResponse
 
 from machine.clients.slack import SlackClient
 from machine.models import User, Channel
+
+logger = get_logger(__name__)
 
 
 class View:
@@ -27,6 +30,12 @@ class View:
     def __init__(self, client: SlackClient, cmd_payload: dict[str, Any]):
         self._client = client
         self._cmd_payload = cmd_payload
+        if "response_urls" in self._cmd_payload and len(self._cmd_payload["response_urls"]) > 0:
+            response_url = self._cmd_payload["response_urls"][0]["response_url"]
+            logger.debug(f"Response URL = {response_url}")
+            self._webhook_client = AsyncWebhookClient(response_url)
+        else:
+            self._webhook_client = None
 
     @property
     def sender(self) -> User:
@@ -74,6 +83,46 @@ class View:
         :return: the trigger id associated with the command
         """
         return self._cmd_payload["trigger_id"]
+
+    async def say(
+        self,
+        text: str | None = None,
+        attachments: Sequence[Attachment] | Sequence[dict[str, Any]] | None = None,
+        blocks: Sequence[Block] | Sequence[dict[str, Any]] | None = None,
+        ephemeral: bool = True,
+        **kwargs: Any,
+    ) -> WebhookResponse | None:
+        """Send a new message to the converation payload in the view
+
+        If the view was not setup to provide a response_url, this will silently fail
+
+        See how to setup the view for messages after submit [here]
+        This will send an ephemeral message by default, only visible to the user that invoked the command.
+        You can set `ephemeral` to `False` to make the message visible to everyone in the channel
+        Any extra kwargs you provide, will be passed on directly to `AsyncWebhookClient.send()`
+
+        [here]: https://api.slack.com/surfaces/modals#modal_response_url
+
+        :param text: message text
+        :param attachments: optional attachments (see [attachments])
+        :param blocks: optional blocks (see [blocks])
+        :param ephemeral: `True/False` wether to send the message as an ephemeral message, only
+            visible to the sender of the original message
+        :return: Dictionary deserialized from `AsyncWebhookClient.send()`
+
+        """
+
+        if not self._webhook_client:
+            return None
+
+        if ephemeral:
+            response_type = "ephemeral"
+        else:
+            response_type = "in_channel"
+
+        return await self._webhook_client.send(
+            text=text, attachments=attachments, blocks=blocks, response_type=response_type, **kwargs
+        )
 
     # todo: convert to loading a new 'view' into the dialog we received
     async def modal(

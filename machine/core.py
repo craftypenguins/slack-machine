@@ -237,8 +237,6 @@ class Machine:
                 fq_fn_name=fq_fn_name,
                 function=fn,
                 action_id=interactive_config.action_id,
-                interactive_config=interactive_config,
-                class_help=class_help,
             )
         for view_config in metadata.plugin_actions.view:
             self._register_view_handler(
@@ -247,8 +245,6 @@ class Machine:
                 fq_fn_name=fq_fn_name,
                 function=fn,
                 callback_id=view_config.callback_id,
-                view_config=view_config,
-                class_help=class_help,
             )
         for command_config in metadata.plugin_actions.commands:
             self._register_command_handler(
@@ -327,8 +323,6 @@ class Machine:
         fq_fn_name: str,
         function: Callable[..., Awaitable[None]],
         action_id: str,
-        interactive_config: InteractiveConfig,
-        class_help: str,
     ) -> None:
         signature = Signature.from_callable(function)
         logger.debug("signature of interactive handler", signature=signature, function=fq_fn_name)
@@ -346,8 +340,6 @@ class Machine:
         fq_fn_name: str,
         function: Callable[..., Awaitable[None]],
         callback_id: str,
-        view_config: ViewConfig,
-        class_help: str,
     ) -> None:
         signature = Signature.from_callable(function)
         logger.debug("signature of view handler", signature=signature, function=fq_fn_name)
@@ -360,7 +352,7 @@ class Machine:
         )
         if callback_id in self._registered_actions.view:
             logger.warning(
-                "action_id was already defined, previous handler will be overwritten!", callback_id=callback_id
+                "callback_id was already defined, previous handler will be overwritten!", callback_id=callback_id
             )
         self._registered_actions.view[callback_id] = handler
 

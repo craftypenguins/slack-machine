@@ -141,7 +141,7 @@ def create_interactive_event_handler(
                 fn = cast(Callable[..., Awaitable[None]], cmd.function)
                 await fn(interactive_obj)
 
-            return interactive_event_handler
+    return interactive_event_handler
 
 
 def create_view_event_handler(
@@ -150,6 +150,11 @@ def create_view_event_handler(
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
     async def view_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
         if request.type == "interactive" and request.payload["type"] == "view_submission":
+            logger.debug("view_submission payload received", payload=request.payload)
+            # Ack
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            await client.send_socket_mode_response(response)
+
             try:
                 callback_id = request.payload["view"]["callback_id"]
             except (KeyError, IndexError, TypeError):
@@ -159,11 +164,11 @@ def create_view_event_handler(
             logger.debug(f"view view_submission {plugin_actions.view.keys()}")
             if callback_id in plugin_actions.view:
                 cmd = plugin_actions.view[callback_id]
-                view_obj = _gen_interactive(request.payload, slack_client)
+                view_obj = _gen_view(request.payload, slack_client)
                 fn = cast(Callable[..., Awaitable[None]], cmd.function)
                 await fn(view_obj)
 
-            return view_event_handler
+    return view_event_handler
 
 
 def generate_message_matcher(settings: Mapping) -> re.Pattern[str]:
@@ -255,8 +260,8 @@ def _gen_interactive(interactive_payload: dict[str, Any], slack_client: SlackCli
     return Interactive(slack_client, interactive_payload)
 
 
-def _gen_view(interactive_payload: dict[str, Any], slack_client: SlackClient) -> Command:
-    return View(slack_client, interactive_payload)
+def _gen_view(view_payload: dict[str, Any], slack_client: SlackClient) -> Command:
+    return View(slack_client, view_payload)
 
 
 async def dispatch_listeners(
