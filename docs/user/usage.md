@@ -30,6 +30,10 @@ Slack Machine, and the most of the built-in plugins, only need a `SLACK_APP_TOKE
 
 You can override the log level by setting `LOGLEVEL`. By default this is set to `"ERROR"`.
 
+!!! warning
+
+    If you set the `LOGLEVEL` to `DEBUG`, all events your Slack App is subscribed to, will be logged.
+
 If you want to use Slack Machine behind a proxy, you can set `HTTP_PROXY`.
 
 ### Using environment variables for configuration
@@ -120,16 +124,18 @@ supports different *backends* for storage, so you can choose one that best fits 
 You can configure which backend to use, by setting the `STORAGE_BACKEND` variable in `local_settings.py` to the fully
 qualified class of the chosen storage backend.
 
-Out of the box, Slack Machine provides 3 options for storage backend:
+Out of the box, Slack Machine provides 4 options for storage backend:
 
-#### in-memory (*default*):
+#### in-memory (*default*)
 
 This backend will store all data in-memory, which is great for testing because it doesn't have any external
 dependencies. **Does not persist data between restarts**
 
 *Class*: `machine.storage.backends.memory.MemoryStorage`
 
-#### Redis:
+#### Redis
+
+Install with: `pip install 'slack-machine[redis]'`
 
 This backend stores data in [Redis](https://redis.io/). Redis is a very fast key-value store that is super easy to
 install and operate. This backend is recommended, because it will persist data between restarts. The Redis backend
@@ -151,6 +157,8 @@ Optional parameters:
 
 #### DynamoDB
 
+Install with: `pip install 'slack-machine[dynamodb]'`
+
 This backend stores data in [DynamoDB](https://aws.amazon.com/dynamodb/). DynamoDB is a managed NoSQL datastore on AWS
 that, among other things, allows for easy persistance of objects by key. The DynamoDB backend requires either a set of
 valid AWS account credentials, or a locally running DynamoDB test bed, such as the one included in
@@ -171,11 +179,16 @@ Optional parameters:
 
 #### SQLite
 
-This backend stores data in [SQLite](https://www.sqlite.org/).  SQLite is a C library that provides a lightweight disk-based database that doesn’t require a separate server process and allows accessing the database using a nonstandard variant of the SQL query language. Some applications can use SQLite for internal data storage.
+Install with: `pip install 'slack-machine[sqlite]'`
 
-The SQLite backend requires you to provide a filename that will be use to store the data by setting the `SQLITE_PATH` variable in `local_settings.py`. The filename can be relative or absolute.
+This backend stores data in [SQLite](https://www.sqlite.org/). SQLite is a C library that provides a lightweight
+disk-based database that doesn’t require a separate server process and allows accessing the database using a
+non-standard variant of the SQL query language.
 
-    `SQLITE_PATH: /path/to/slackmachine.sqlite3`
+The SQLite backend requires you to provide a filename that will be used to store the data by setting the
+`SQLITE_PATH` variable in `local_settings.py`. The filename can be relative or absolute:
+
+    `SQLITE_PATH: /path/to/slack-machine.db`
 
 *Class*: `machine.storage.backends.sqlite.SQLiteStorage`
 

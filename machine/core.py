@@ -6,7 +6,7 @@ from structlog.stdlib import get_logger
 import os
 import sys
 from typing import Callable, cast, Awaitable
-from typing_extensions import Literal
+from typing import Literal
 from inspect import Signature
 
 import dill
@@ -21,6 +21,7 @@ from machine.handlers import (
     create_view_event_handler,
     create_generic_event_handler,
     create_slash_command_handler,
+    log_request,
 )
 from machine.models.core import (
     InteractiveHandler,
@@ -171,7 +172,8 @@ class Machine:
         missing_settings.extend(self._check_missing_settings(cls_instance_for_missing_settings))
         methods = inspect.getmembers(cls_instance, predicate=inspect.ismethod)
         for _, fn in methods:
-            missing_settings.extend(self._check_missing_settings(fn))
+            method_for_missing_settings = cast(DecoratedPluginFunc, fn)
+            missing_settings.extend(self._check_missing_settings(method_for_missing_settings))
         if missing_settings:
             return missing_settings
 
@@ -278,7 +280,6 @@ class Machine:
         class_help: str,
     ) -> None:
         signature = Signature.from_callable(function)
-        logger.debug("signature of message handler", signature=signature, function=fq_fn_name)
         handler = MessageHandler(
             class_=class_,
             class_name=class_name,
@@ -384,6 +385,10 @@ class Machine:
 
         bot_id = self._client.bot_info["user_id"]
         bot_name = self._client.bot_info["name"]
+
+        if self._settings.get("LOGLEVEL", "ERROR").upper() == "DEBUG":
+            self._client.register_handler(log_request)
+
         message_handler = create_message_handler(
             self._registered_actions, self._settings, bot_id, bot_name, self._client
         )
