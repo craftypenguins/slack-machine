@@ -20,15 +20,13 @@ class SQLiteStorage(MachineBaseStorage):
         self.conn = await aiosqlite.connect(self._file)
         self.conn.text_factory = bytes
         self.cursor = await self.conn.cursor()
-        await self.cursor.execute(
-            """
+        await self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS storage (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 expires INTEGER
             )
-        """
-        )
+        """)
         await self.conn.commit()
 
     async def set(self, key: str, value: bytes, expires: int | None = None) -> None:

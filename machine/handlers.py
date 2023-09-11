@@ -14,6 +14,7 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 from machine.clients.slack import SlackClient
 from machine.models.core import RegisteredActions, MessageHandler
 from machine.plugins.interactive import Interactive
+from machine.plugins.view import View
 from machine.plugins.command import Command
 from machine.plugins.message import Message
 
@@ -117,20 +118,19 @@ def create_interactive_event_handler(
     slack_client: SlackClient,
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
     async def interactive_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
-        if request.type == "interactive":
+        if request.type == "interactive" and request.payload["type"] == "block_actions":
             logger.debug("interactive payload received", payload=request.payload)
             # Ack
             response = SocketModeResponse(envelope_id=request.envelope_id)
             await client.send_socket_mode_response(response)
 
-            # only process registered 'action_id' interactive payloads
             # We'll limit ourself to the first action in the array
             # request->payload->actions[0]->action_id
             try:
                 action_id = request.payload["actions"][0]["action_id"]
                 # You can use action_id here as the value is available
             except (KeyError, IndexError, TypeError):
-                logger.warning("interactive payload no action_id to trigger on")
+                logger.warning("interactive block_actions payload no action_id to trigger on")
                 return
 
             logger.debug(f"interactive payload action_id {action_id}")
@@ -142,6 +142,33 @@ def create_interactive_event_handler(
                 await fn(interactive_obj)
 
     return interactive_event_handler
+
+
+def create_view_event_handler(
+    plugin_actions: RegisteredActions,
+    slack_client: SlackClient,
+) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
+    async def view_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+        if request.type == "interactive" and request.payload["type"] == "view_submission":
+            logger.debug("view_submission payload received", payload=request.payload)
+            # Ack
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            await client.send_socket_mode_response(response)
+
+            try:
+                callback_id = request.payload["view"]["callback_id"]
+            except (KeyError, IndexError, TypeError):
+                logger.warning("view_submission payload no callback_id to trigger on")
+                return
+            logger.debug(f"view payload callback_id {callback_id}")
+            logger.debug(f"view view_submission {plugin_actions.view.keys()}")
+            if callback_id in plugin_actions.view:
+                cmd = plugin_actions.view[callback_id]
+                view_obj = _gen_view(request.payload, slack_client)
+                fn = cast(Callable[..., Awaitable[None]], cmd.function)
+                await fn(view_obj)
+
+    return view_event_handler
 
 
 def generate_message_matcher(settings: Mapping) -> re.Pattern[str]:
@@ -231,6 +258,10 @@ def _gen_command(cmd_payload: dict[str, Any], slack_client: SlackClient) -> Comm
 
 def _gen_interactive(interactive_payload: dict[str, Any], slack_client: SlackClient) -> Command:
     return Interactive(slack_client, interactive_payload)
+
+
+def _gen_view(view_payload: dict[str, Any], slack_client: SlackClient) -> Command:
+    return View(slack_client, view_payload)
 
 
 async def dispatch_listeners(
