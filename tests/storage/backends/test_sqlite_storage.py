@@ -1,15 +1,25 @@
 import pytest
+<<<<<<< HEAD
 import tempfile
 import os
 
 from machine.storage.backends.sqlite import SQLiteStorage
 import pytest_asyncio
 import asyncio
+=======
+
+from machine.storage.backends.sqlite import SQLiteStorage
+import pytest_asyncio
+>>>>>>> interactive
 
 
 @pytest_asyncio.fixture
 async def sqlite_storage():
+<<<<<<< HEAD
     storage = SQLiteStorage({"SQLITE_FILE": ":memory:"})
+=======
+    storage = SQLiteStorage({"SQLITE_PATH": ":memory:"})
+>>>>>>> interactive
     await storage.init()
     yield storage
     await storage.close()
@@ -37,8 +47,26 @@ async def test_delete(sqlite_storage: SQLiteStorage):
 
 
 @pytest.mark.asyncio
+<<<<<<< HEAD
+=======
+async def test_expire_values(sqlite_storage: SQLiteStorage, mocker):
+    mocked_time = mocker.patch("machine.storage.backends.sqlite.time", autospec=True)
+    mocked_time.time.return_value = 44046732
+    await sqlite_storage.set("key1", b"value1", expires=15)
+    assert await sqlite_storage.get_expire("key1") == 44046732 + 15
+    assert await sqlite_storage.get("key1") == b"value1"
+    mocked_time.time.return_value = 44046732 + 20
+    assert await sqlite_storage.get("key1") is None
+
+
+@pytest.mark.asyncio
+>>>>>>> interactive
 async def test_size(sqlite_storage: SQLiteStorage):
     assert await sqlite_storage.size() == 0
     await sqlite_storage.set("test_key_1", "test_value_1")
     await sqlite_storage.set("test_key_2", "test_value_2")
+<<<<<<< HEAD
     assert await sqlite_storage.size() == 2
+=======
+    assert await sqlite_storage.size() > 44  # number of characters in both columns for both rows
+>>>>>>> interactive

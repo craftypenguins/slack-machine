@@ -30,7 +30,7 @@ def create_message_handler(
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
     message_matcher = generate_message_matcher(settings)
 
-    async def message_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+    async def handle_message_request(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
         if request.type == "events_api":
             # Acknowledge the request anyway
             response = SocketModeResponse(envelope_id=request.envelope_id)
@@ -50,14 +50,14 @@ def create_message_handler(
                     force_user_lookup=settings["FORCE_USER_LOOKUP"],
                 )
 
-    return message_handler
+    return handle_message_request
 
 
 def create_slash_command_handler(
     plugin_actions: RegisteredActions,
     slack_client: SlackClient,
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
-    async def slash_command_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+    async def handle_slash_command_request(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
         if request.type == "slash_commands":
             logger.debug("slash command received", payload=request.payload)
             # We only acknowledge request if we know about this command
@@ -91,13 +91,13 @@ def create_slash_command_handler(
                     fn = cast(Callable[..., Awaitable[None]], cmd.function)
                     await fn(command_obj, **extra_args)
 
-    return slash_command_handler
+    return handle_slash_command_request
 
 
 def create_generic_event_handler(
     plugin_actions: RegisteredActions,
 ) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
-    async def generic_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+    async def handle_event_request(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
         if request.type == "events_api":
             # Acknowledge the request anyway
             response = SocketModeResponse(envelope_id=request.envelope_id)
@@ -110,7 +110,69 @@ def create_generic_event_handler(
                     request.payload["event"], list(plugin_actions.process[request.payload["event"]["type"]].values())
                 )
 
-    return generic_event_handler
+    return handle_event_request
+
+
+async def log_request(_: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+    logger.debug("Request received", type=request.type, request=request.to_dict())
+
+
+def create_interactive_event_handler(
+    plugin_actions: RegisteredActions,
+    slack_client: SlackClient,
+) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
+    async def interactive_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+        if request.type == "interactive" and request.payload["type"] == "block_actions":
+            logger.debug("interactive payload received", payload=request.payload)
+            # Ack
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            await client.send_socket_mode_response(response)
+
+            # We'll limit ourself to the first action in the array
+            # request->payload->actions[0]->action_id
+            try:
+                action_id = request.payload["actions"][0]["action_id"]
+                # You can use action_id here as the value is available
+            except (KeyError, IndexError, TypeError):
+                logger.warning("interactive block_actions payload no action_id to trigger on")
+                return
+
+            logger.debug(f"interactive payload action_id {action_id}")
+            logger.debug(f"interactive interactive_actions {plugin_actions.interactive.keys()}")
+            if action_id in plugin_actions.interactive:
+                cmd = plugin_actions.interactive[action_id]
+                interactive_obj = _gen_interactive(request.payload, slack_client)
+                fn = cast(Callable[..., Awaitable[None]], cmd.function)
+                await fn(interactive_obj)
+
+    return interactive_event_handler
+
+
+def create_view_event_handler(
+    plugin_actions: RegisteredActions,
+    slack_client: SlackClient,
+) -> Callable[[AsyncBaseSocketModeClient, SocketModeRequest], Awaitable[None]]:
+    async def view_event_handler(client: AsyncBaseSocketModeClient, request: SocketModeRequest) -> None:
+        if request.type == "interactive" and request.payload["type"] == "view_submission":
+            logger.debug("view_submission payload received", payload=request.payload)
+            # Ack
+            response = SocketModeResponse(envelope_id=request.envelope_id)
+            await client.send_socket_mode_response(response)
+
+            try:
+                callback_id = request.payload["view"]["callback_id"]
+            except (KeyError, IndexError, TypeError):
+                logger.warning("view_submission payload no callback_id to trigger on")
+                return
+            logger.debug(f"view payload callback_id {callback_id}")
+            logger.debug(f"view view_submission {plugin_actions.view.keys()}")
+            if callback_id in plugin_actions.view:
+                cmd = plugin_actions.view[callback_id]
+                view_obj = _gen_view(request.payload, slack_client)
+                fn = cast(Callable[..., Awaitable[None]], cmd.function)
+                await fn(view_obj)
+
+    return view_event_handler
 
 
 def create_interactive_event_handler(
