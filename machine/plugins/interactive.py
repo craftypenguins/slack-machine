@@ -106,12 +106,65 @@ class Interactive:
         text: str | None = None,
         attachments: Sequence[Attachment] | Sequence[dict[str, Any]] | None = None,
         blocks: Sequence[Block] | Sequence[dict[str, Any]] | None = None,
+        thread_ts: str | None = None,
+        ephemeral: bool = False,
+        **kwargs: Any,
+    ) -> AsyncSlackResponse:
+        """Send a new message to the channel the original message was received in
+
+        Send a new message to the channel the original message was received in, using the WebAPI.
+        Allows for rich formatting using `blocks`_ and/or `attachments`_. You can provide blocks
+        and attachments as Python dicts or you can use the `convenient classes`_ that the
+        underlying slack client provides.
+        Can also reply to a thread and send an ephemeral message only visible to the sender of the
+        original message. Ephemeral messages and threaded messages are mutually exclusive, and
+        ``ephemeral`` takes precedence over ``thread_ts``
+        Any extra kwargs you provide, will be passed on directly to the `chat.postMessage`_ or
+        `chat.postEphemeral`_ request.
+
+        .. _attachments: https://api.slack.com/docs/message-attachments
+        .. _blocks: https://api.slack.com/reference/block-kit/blocks
+        .. _convenient classes:
+            https://github.com/slackapi/python-slackclient/tree/master/slack/web/classes
+
+        :param text: message text
+        :param attachments: optional attachments (see `attachments`_)
+        :param blocks: optional blocks (see `blocks`_)
+        :param thread_ts: optional timestamp of thread, to send a message in that thread
+        :param ephemeral: ``True/False`` wether to send the message as an ephemeral message, only
+            visible to the sender of the original message
+        :return: Dictionary deserialized from `chat.postMessage`_ request, or `chat.postEphemeral`_
+            if `ephemeral` is True.
+
+        .. _chat.postMessage: https://api.slack.com/methods/chat.postMessage
+        .. _chat.postEphemeral: https://api.slack.com/methods/chat.postEphemeral
+        """
+        if ephemeral:
+            ephemeral_user = self.sender.id
+        else:
+            ephemeral_user = None
+
+        return await self._client.send(
+            self.channel.id,
+            text=text,
+            attachments=attachments,
+            blocks=blocks,
+            thread_ts=thread_ts,
+            ephemeral_user=ephemeral_user,
+            **kwargs,
+        )
+
+    async def replace(
+        self,
+        text: str | None = None,
+        attachments: Sequence[Attachment] | Sequence[dict[str, Any]] | None = None,
+        blocks: Sequence[Block] | Sequence[dict[str, Any]] | None = None,
         ephemeral: bool = True,
         **kwargs: Any,
     ) -> WebhookResponse:
-        """Send a new message to the channel the command was invoked in
+        """Send a interactive replacment message to the channel the command was invoked in
 
-        Send a new message to the channel the command was invoked in, using the response_url as a webhook.
+        Send a response message to the channel the command was invoked in, using the response_url as a webhook.
         Allows for rich formatting using [blocks] and/or [attachments] . You can provide blocks
         and attachments as Python dicts or you can use the [convenient classes] that the
         underlying slack client provides.
